@@ -4,10 +4,13 @@ import burlap.domain.singleagent.bees.state.BeesAgent;
 import burlap.domain.singleagent.bees.state.BeesCell;
 import burlap.domain.singleagent.bees.state.BeesMap;
 import burlap.domain.singleagent.bees.state.BeesState;
+import burlap.domain.singleagent.blocksworld.BlocksWorldBlock;
+import burlap.domain.singleagent.blocksworld.BlocksWorldState;
 import burlap.mdp.core.TerminalFunction;
 import burlap.mdp.auxiliary.DomainGenerator;
 import burlap.mdp.core.oo.OODomain;
 import burlap.mdp.core.oo.state.OOState;
+import burlap.mdp.core.oo.state.ObjectInstance;
 import burlap.mdp.core.oo.propositional.PropositionalFunction;
 import burlap.mdp.singleagent.SADomain;
 import burlap.mdp.singleagent.common.UniformCostRF;
@@ -120,6 +123,11 @@ public class Bees implements DomainGenerator {
 	public static final String PF_AT_BEE = "atBee";
 
 	/**
+	 * Name for the propositional function that tests whether the agent is stanng next to a bee.
+	 */
+	public static final String PF_NEXT_TO_BEE = "nextToBee";
+
+	/**
 	 * Initializes a world with a maximum 25x25 dimensionality and actions that use semi-deep state copies.
 	 */
 	public Bees() {
@@ -137,7 +145,7 @@ public class Bees implements DomainGenerator {
 	}
 
 	public List<PropositionalFunction> generatePfs(){
-		return Arrays.asList(new AtHoneyPF(), new AtBeePF());
+		return Arrays.asList(new AtHoneyPF(), new AtBeePF(), new NextToBeePF());
 	}
 
 	@Override
@@ -219,7 +227,10 @@ public class Bees implements DomainGenerator {
 
 		@Override
 		public boolean isTrue(OOState st, String... params) {
-			return false;
+			BeesState s = (BeesState)st;
+			BeesAgent a = (BeesAgent)s.object(params[0]);
+			BeesCell h = (BeesCell)s.object(params[1]);
+			return h.getClassName() == CLASS_HONEY && a.x == h.x && a.y == h.y;
 		}
 	}
 
@@ -235,7 +246,33 @@ public class Bees implements DomainGenerator {
 
 		@Override
 		public boolean isTrue(OOState st, String... params) {
-			return false;
+			BeesState s = (BeesState)st;
+			BeesAgent a = (BeesAgent)s.object(params[0]);
+			BeesCell b = (BeesCell)s.object(params[1]);
+			return b.getClassName() == CLASS_BEE && a.x == b.x && a.y == b.y;
+		}
+	}
+
+	/**
+	 * A {@link PropositionalFunction} that takes as arguments an agent object and a bee object
+	 * and evaluates whether the agent is hit by a bee.
+	 */
+	public class NextToBeePF extends PropositionalFunction {
+
+		public NextToBeePF() {
+			super(PF_NEXT_TO_BEE, new String[]{CLASS_AGENT, CLASS_BEE});
+		}
+
+		@Override
+		public boolean isTrue(OOState st, String... params) {
+			BeesState s = (BeesState)st;
+			BeesAgent a = (BeesAgent)s.object(params[0]);
+			BeesCell b = (BeesCell)s.object(params[1]);
+			return b.getClassName() == CLASS_BEE && (
+					a.x - 1 == b.x && a.y == b.y ||
+					a.x + 1 == b.x && a.y == b.y ||
+					a.x == b.x && a.y - 1 == b.y ||
+					a.x == b.x && a.y + 1 == b.y);
 		}
 	}
 
@@ -257,10 +294,10 @@ public class Bees implements DomainGenerator {
 				BeesCell.honey("honey", 3, 21),
 				BeesCell.bee("b0", 9, 1),
 				BeesCell.bee("b1", 13, 1),
-				BeesCell.bee("b1", 13, 3),
-				BeesCell.bee("b1", 3, 20),
-				BeesCell.bee("b1", 4, 21),
-				BeesCell.bee("b1", 21, 6)
+				BeesCell.bee("b2", 13, 3),
+				BeesCell.bee("b3", 3, 20),
+				BeesCell.bee("b4", 4, 21),
+				BeesCell.bee("b5", 21, 6)
 		);
 
 		Visualizer v = BeesVisualizer.getVisualizer(be.maxx, be.maxy);

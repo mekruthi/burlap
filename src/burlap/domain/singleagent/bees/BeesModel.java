@@ -9,6 +9,7 @@ import burlap.mdp.core.state.State;
 import burlap.mdp.singleagent.model.statemodel.FullStateModel;
 
 import java.util.List;
+import java.util.Random;
 
 import static burlap.domain.singleagent.bees.Bees.*;
 
@@ -73,16 +74,23 @@ public class BeesModel implements FullStateModel {
 		int ay = agent.y;
 		int nx = ax+dx;
 		int ny = ay+dy;
-		
-		if(map[nx][ny] == 1) {
-			return;
-		}
 
 		if(nx < 0 || nx >= maxx){
 			return;
 		}
 		if(ny < 0 || ny >= maxy){
 			return;
+		}
+		
+		if(map[nx][ny] == 1) {
+			return;
+		}
+
+		agent.x = nx;
+		agent.y = ny;
+		
+		for(BeesCell b : s.bees) {
+			this.moveBeeCloser(s, b, 0.2);
 		}
 		
 		BeesCell bee;
@@ -94,9 +102,6 @@ public class BeesModel implements FullStateModel {
 		if(nx == s.honey.x && ny == s.honey.y) {
 			agent.hunger = agent.hunger - 1;
 		}
-
-		agent.x = nx;
-		agent.y = ny;
 	}
 	
 	/**
@@ -112,8 +117,93 @@ public class BeesModel implements FullStateModel {
 				return b;
 			}
 		}
-
 		return null;
+	}
+	
+	private void moveBeeRandom(BeesState s, BeesCell b, double probMove) {
+		Random rn = new Random();
+		BeesCell bee = (BeesCell)s.object(b.name());
+		int [][] map = s.map.map;
+
+		int bx = bee.x;
+		int by = bee.y;
+		int nx = bx;
+		int ny = by;
+		
+		double i = rn.nextDouble();
+		// Roll dice for move, might move into wall, because bees are dumb
+		if(i < probMove) {
+			double e = rn.nextDouble();
+			if(e < 0.25) {
+				nx = bx - 1;
+			} else if(e < 0.5) {
+				nx = bx + 1;
+			} else if(e < 0.75) {
+				ny = by - 1;
+			} else {
+				ny = by + 1;
+			}
+		}
+
+		if(nx < 0 || nx >= maxx){
+			return;
+		}
+		if(ny < 0 || ny >= maxy){
+			return;
+		}
+		
+		if(map[nx][ny] == 1) {
+			return;
+		}
+		
+		bee.x = nx;
+		bee.y = ny;
+	}
+	
+	private void moveBeeCloser(BeesState s, BeesCell b, double probRandom) {
+		Random rn = new Random();
+		BeesAgent agent = (BeesAgent)s.agent;
+		BeesCell bee = (BeesCell)s.object(b.name());
+		int [][] map = s.map.map;
+
+		int ax = agent.x;
+		int ay = agent.y;
+		int bx = bee.x;
+		int by = bee.y;
+		int nx = bx;
+		int ny = by;
+		
+		double i = rn.nextDouble();
+		// Chance for bee to choose to roam randomly
+		if(i < probRandom) {
+			moveBeeRandom(s, b, 1.0);
+			return;
+		}
+		
+		nx = bx + Math.max(Math.min(ax - bx, 1), -1);
+		ny = by + Math.max(Math.min(ay - by, 1), -1);
+		if(nx != bx && ny != by) {
+			// Do not move diagonally, randomly pick one
+			if(rn.nextFloat() < 0.5) {
+				nx = bx;
+			} else {
+				ny = by;
+			}
+		}
+
+		if(nx < 0 || nx >= maxx){
+			return;
+		}
+		if(ny < 0 || ny >= maxy){
+			return;
+		}
+		
+		if(map[nx][ny] == 1) {
+			return;
+		}
+		
+		bee.x = nx;
+		bee.y = ny;
 	}
 }
 
