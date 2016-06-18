@@ -1,5 +1,19 @@
 package burlap.domain.singleagent.bees;
 
+import burlap.behavior.learningrate.ExponentialDecayLR;
+import burlap.behavior.learningrate.SoftTimeInverseDecayLR;
+import burlap.behavior.policy.EpsilonGreedy;
+import burlap.behavior.policy.Policy;
+import burlap.behavior.policy.PolicyUtils;
+import burlap.behavior.singleagent.Episode;
+import burlap.behavior.singleagent.auxiliary.EpisodeSequenceVisualizer;
+import burlap.behavior.singleagent.learning.LearningAgent;
+import burlap.behavior.singleagent.learning.tdmethods.QLearning;
+import burlap.behavior.singleagent.learning.tdmethods.SarsaLam;
+import burlap.behavior.singleagent.planning.deterministic.DeterministicPlanner;
+import burlap.behavior.singleagent.planning.deterministic.informed.Heuristic;
+import burlap.behavior.singleagent.planning.deterministic.informed.astar.AStar;
+import burlap.behavior.singleagent.planning.deterministic.uninformed.bfs.BFS;
 import burlap.domain.singleagent.bees.state.BeesAgent;
 import burlap.domain.singleagent.bees.state.BeesCell;
 import burlap.domain.singleagent.bees.state.BeesMap;
@@ -8,19 +22,24 @@ import burlap.domain.singleagent.blocksworld.BlocksWorldBlock;
 import burlap.domain.singleagent.blocksworld.BlocksWorldState;
 import burlap.mdp.core.TerminalFunction;
 import burlap.mdp.auxiliary.DomainGenerator;
+import burlap.mdp.auxiliary.stateconditiontest.TFGoalCondition;
 import burlap.mdp.core.oo.OODomain;
 import burlap.mdp.core.oo.state.OOState;
 import burlap.mdp.core.oo.state.ObjectInstance;
+import burlap.mdp.core.state.State;
 import burlap.mdp.core.oo.propositional.PropositionalFunction;
 import burlap.mdp.singleagent.SADomain;
 import burlap.mdp.singleagent.common.UniformCostRF;
+import burlap.mdp.singleagent.environment.SimulatedEnvironment;
 import burlap.mdp.singleagent.model.RewardFunction;
 import burlap.mdp.singleagent.model.FactoredModel;
 import burlap.mdp.singleagent.action.UniversalActionType;
 import burlap.mdp.singleagent.oo.OOSADomain;
 import burlap.shell.visual.VisualExplorer;
+import burlap.statehashing.simple.SimpleHashableStateFactory;
 import burlap.visualizer.Visualizer;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
@@ -56,12 +75,12 @@ public class Bees implements DomainGenerator {
 	/**
 	 * Domain parameter specifying the maximum x dimension value of the world
 	 */
-	protected int										maxx = 25;
+	protected int maxx = 25;
 
 	/**
 	 * Domain parameter specifying the maximum y dimension value of the world
 	 */
-	protected int										maxy = 25;
+	protected int maxy = 25;
 
 	/**
 	 * Name for the agent OO-MDP class
@@ -128,6 +147,16 @@ public class Bees implements DomainGenerator {
 	public static final String PF_NEXT_TO_BEE = "nextToBee";
 
 	/**
+	 * Name for the propositional function that tests whether the agent is out of health.
+	 */
+	public static final String PF_NO_HEALTH = "noHealth";
+
+	/**
+	 * Name for the propositional function that tests whether the agent has no hunger.
+	 */
+	public static final String PF_NO_HUNGER = "noHunger";
+
+	/**
 	 * Initializes a world with a maximum 25x25 dimensionality and actions that use semi-deep state copies.
 	 */
 	public Bees() {
@@ -145,7 +174,7 @@ public class Bees implements DomainGenerator {
 	}
 
 	public List<PropositionalFunction> generatePfs(){
-		return Arrays.asList(new AtHoneyPF(), new AtBeePF(), new NextToBeePF());
+		return Arrays.asList(new AtHoneyPF(), new AtBeePF(), new NextToBeePF(), new NoHungerPF(), new NoHealthPF());
 	}
 
 	@Override
@@ -165,9 +194,9 @@ public class Bees implements DomainGenerator {
 				.addActionType(new UniversalActionType(ACTION_IDLE));
 
 		OODomain.Helper.addPfsToDomain(domain, this.generatePfs());
-
-		RewardFunction rf = this.rf;
+		
 		TerminalFunction tf = this.tf;
+		RewardFunction rf = this.rf;
 
 		if(tf == null){
 			tf = new BeesTF();
@@ -277,31 +306,72 @@ public class Bees implements DomainGenerator {
 	}
 
 	/**
+	 * A {@link PropositionalFunction} that takes as arguments an agent object and evaluates
+	 * whether the agent has no health.
+	 */
+	public class NoHealthPF extends PropositionalFunction {
+		public NoHealthPF() {
+			super(PF_NO_HEALTH, new String[]{CLASS_AGENT});
+		}
+
+		@Override
+		public boolean isTrue(OOState st, String... params) {
+			BeesState s = (BeesState)st;
+			BeesAgent a = (BeesAgent)s.object(params[0]);
+			return a.health <= 0;
+		}
+	}
+
+	/**
+	 * A {@link PropositionalFunction} that takes as arguments an agent object and evaluates
+	 * whether the agent is no longer hungry.
+	 */
+	public class NoHungerPF extends PropositionalFunction {
+		public NoHungerPF() {
+			super(PF_NO_HUNGER, new String[]{CLASS_AGENT});
+		}
+
+		@Override
+		public boolean isTrue(OOState st, String... params) {
+			BeesState s = (BeesState)st;
+			BeesAgent a = (BeesAgent)s.object(params[0]);
+			return a.hunger <= 0;
+		}
+	}
+
+	/**
 	 * Runs an interactive visual explorer for random bees level. The keys w,a,s,d,x correspond to actions
 	 * north, west, south, east, idle
 	 * @param args can be empty.
 	 */
 	public static void main(String[] args) {
-
 		Bees be = new Bees();
-		SADomain domain = be.generateDomain();
+		OOSADomain domain = be.generateDomain();
+		be.setTf(new BeesTF());
+		be.setRf(new BeesRF(domain));
 
 		int [][] map = new int[25][25];
+		ArrayList<BeesCell> bees = new ArrayList<BeesCell>();
+		for(int i = 0; i < 4; i++) {
+			BeesCell b = BeesCell.bee("b" + i, 23, 23);
+			bees.add(b);
+		}
 		
 		BeesState s = new BeesState(
-				new BeesAgent(15, 1, 15, 10),
+				new BeesAgent(15, 1, 4, 1),
 				new BeesMap(map),
 				BeesCell.honey("honey", 3, 21),
-				BeesCell.bee("b0", 9, 1),
-				BeesCell.bee("b1", 13, 1),
-				BeesCell.bee("b2", 13, 3),
-				BeesCell.bee("b3", 3, 20),
-				BeesCell.bee("b4", 4, 21),
-				BeesCell.bee("b5", 21, 6)
+				bees
 		);
-
+		
+		//runInteractive(be, domain, s);
+		//runPlanner(be, domain, s);
+		runLearner(be, domain, s);
+	}
+	
+	private static void runInteractive(Bees be, OOSADomain domain, BeesState initialState) {
 		Visualizer v = BeesVisualizer.getVisualizer(be.maxx, be.maxy);
-		VisualExplorer exp = new VisualExplorer(domain, v, s);
+		VisualExplorer exp = new VisualExplorer(domain, v, initialState);
 
 		exp.addKeyAction("w", ACTION_NORTH, "");
 		exp.addKeyAction("d", ACTION_EAST, "");
@@ -309,10 +379,85 @@ public class Bees implements DomainGenerator {
 		exp.addKeyAction("s", ACTION_SOUTH, "");
 		exp.addKeyAction("x", ACTION_IDLE, "");
 
-		exp.initGUI();
+		exp.initGUI();	
+	}
+	
+	private static void runPlanner(Bees be, OOSADomain domain, BeesState initialState) {
+		TFGoalCondition goalCondition = new TFGoalCondition(be.getTf());
+		SimpleHashableStateFactory hashingFactory = new SimpleHashableStateFactory();
+		
+		Heuristic mdistHeuristic = new Heuristic() {
+			public double h(State s) {
+				BeesAgent a = ((BeesState)s).agent;
+				BeesCell h = ((BeesState)s).honey;
+				double mdist = Math.abs(a.x - h.x) + Math.abs(a.y - h.y);
+				return -mdist;
+			}
+		};
+		
+		DeterministicPlanner planner = new AStar(domain, goalCondition, hashingFactory, mdistHeuristic);
+		Policy p = planner.planFromState(initialState);
+		PolicyUtils.rollout(p,  initialState, domain.getModel()).writeToFile("output/star/");
+		
+		Visualizer v = BeesVisualizer.getVisualizer(be.maxx, be.maxy);
+		new EpisodeSequenceVisualizer(v, domain, "ouptut/bfs/");
+	}
+	
+	private static void runLearner(Bees be, OOSADomain domain, BeesState initialState) {
+		double SAVE_PERCENT = 0.05; // percent of last runs to save
+		String OUTPUT_FOLDER = "output/ql/";
+		int POST_WIN_SAVE = 3;
+		
+		double GAMMA = 0.9;
+		double QINIT = 0.;
+		double LEARNING_RATE = 0.1;
+		int MAX_STEPS = 500;
+		double LAMBDA = 0.9;
+		double EPSILON = 0.1;
+		
+		SimpleHashableStateFactory hashingFactory = new SimpleHashableStateFactory();
+		//LearningAgent agent = new QLearning(domain, GAMMA, hashingFactory, QINIT, LEARNING_RATE, MAX_STEPS);
+		SarsaLam agent = new SarsaLam(domain, GAMMA, hashingFactory, QINIT, LEARNING_RATE, MAX_STEPS, LAMBDA);
+		agent.setLearningPolicy(new EpsilonGreedy(agent, EPSILON));
+		SimulatedEnvironment env = new SimulatedEnvironment(domain, initialState);
 
+		ArrayList<Integer> steps = new ArrayList<Integer>();
+		ArrayList<Double> rewards = new ArrayList<Double>();
+		
+		int EPISODE_COUNT = 10000;
+		int last_win = 0 - POST_WIN_SAVE;
+		PropositionalFunction noHunger = domain.getPropFunction(PF_NO_HUNGER);
+		// Start the episodes
+		for (int i = 0; i < EPISODE_COUNT; i++) {
+			Episode e = agent.runLearningEpisode(env, MAX_STEPS);
+			BeesState s = ((BeesState)e.getState(e.maxTimeStep()));
+			
+			// Save if win or immediately following win
+			if(noHunger.somePFGroundingIsTrue(s)) {
+				e.writeToFile(OUTPUT_FOLDER + i);
+				System.out.println("Success on episode " + i);
+				last_win = i;
+			}
+			else if(i <= last_win + POST_WIN_SAVE) {
+				e.writeToFile(OUTPUT_FOLDER + i);
+			}
+			// Save last 10%
+			else if(i > (EPISODE_COUNT * (1 - SAVE_PERCENT))) {
+				e.writeToFile(OUTPUT_FOLDER + i);
+			}
+			
+			
+			steps.add(e.maxTimeStep());
+			rewards.add(e.getReward(e.maxTimeStep()));
 
-
+			if(i % (EPISODE_COUNT / 20) == 0 && i > 0) {
+				System.out.println((i / (EPISODE_COUNT / 100)) + "% complete...");
+			}
+			env.resetEnvironment();
+		}
+		
+		Visualizer v = BeesVisualizer.getVisualizer(be.maxx, be.maxy);
+		new EpisodeSequenceVisualizer(v, domain, OUTPUT_FOLDER);
 	}
 }
 

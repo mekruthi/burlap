@@ -138,6 +138,8 @@ public class BeesVisualizer {
 			float ry = cHeight - height - (Integer)ob.get(Bees.VAR_Y)*height;
 
 			g2.fill(new Rectangle2D.Float(rx, ry, width, height));
+			
+			g2.drawString("Bees: " + s.objectsOfClass(Bees.CLASS_BEE).size(), 5, 65);
 		}
 	}
 

@@ -8,6 +8,7 @@ import burlap.mdp.core.StateTransitionProb;
 import burlap.mdp.core.state.State;
 import burlap.mdp.singleagent.model.statemodel.FullStateModel;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 
@@ -20,6 +21,8 @@ public class BeesModel implements FullStateModel {
 
 	protected int maxx;
 	protected int maxy;
+	
+	private double PROB_RANDOM_BEE = 0.;
 
 	public BeesModel(int maxx, int maxy) {
 		this.maxx = maxx;
@@ -33,7 +36,6 @@ public class BeesModel implements FullStateModel {
 
 	@Override
 	public State sample(State s, Action a) {
-
 		BeesState bs = (BeesState)s.copy();
 		String aname = a.actionName();
 		if(aname.equals(ACTION_WEST)){
@@ -75,32 +77,27 @@ public class BeesModel implements FullStateModel {
 		int nx = ax+dx;
 		int ny = ay+dy;
 
-		if(nx < 0 || nx >= maxx){
+		if(nx < 0 || nx >= maxx || ny < 0 || ny >= maxy){
 			return;
-		}
-		if(ny < 0 || ny >= maxy){
-			return;
-		}
-		
+		}		
 		if(map[nx][ny] == 1) {
 			return;
 		}
 
 		agent.x = nx;
 		agent.y = ny;
-		
-		for(BeesCell b : s.bees) {
-			this.moveBeeCloser(s, b, 0.2);
-		}
-		
-		BeesCell bee;
-		while((bee = this.getBeesAt(s, nx, ny)) != null) {
-			agent.health = agent.health - 1;
-			s.removeObject(bee.getName());
+
+		// Let the bees move
+		for(BeesCell b : s.bees) {			
+			b = this.moveBeeCloser(s, b, PROB_RANDOM_BEE);			
+			if(b.x == agent.x && b.y == agent.y) {
+				agent.health = Math.max(agent.health - 1, 0);
+				s.removeObject(b.name());
+			}
 		}
 		
 		if(nx == s.honey.x && ny == s.honey.y) {
-			agent.hunger = agent.hunger - 1;
+			agent.hunger = Math.max(agent.hunger - 1, 0);
 		}
 	}
 	
@@ -120,13 +117,24 @@ public class BeesModel implements FullStateModel {
 		return null;
 	}
 	
-	private void moveBeeRandom(BeesState s, BeesCell b, double probMove) {
+	private BeesCell moveBee(BeesState s, BeesCell b, int nx, int ny) {
+		s.copyBees();
+		s.bees.remove(b);
+		b = b.copy();
+		s.bees.add(b);
+		
+		b.x = nx;
+		b.y = ny;
+		
+		return b;
+	}
+	
+	private BeesCell moveBeeRandom(BeesState s, BeesCell b, double probMove) {
 		Random rn = new Random();
-		BeesCell bee = (BeesCell)s.object(b.name());
 		int [][] map = s.map.map;
 
-		int bx = bee.x;
-		int by = bee.y;
+		int bx = b.x;
+		int by = b.y;
 		int nx = bx;
 		int ny = by;
 		
@@ -145,31 +153,25 @@ public class BeesModel implements FullStateModel {
 			}
 		}
 
-		if(nx < 0 || nx >= maxx){
-			return;
+		if(nx < 0 || nx >= maxx || ny < 0 || ny >= maxy){
+			return b;
 		}
-		if(ny < 0 || ny >= maxy){
-			return;
-		}
-		
 		if(map[nx][ny] == 1) {
-			return;
+			return b;
 		}
 		
-		bee.x = nx;
-		bee.y = ny;
+		return this.moveBee(s, b, nx, ny);
 	}
 	
-	private void moveBeeCloser(BeesState s, BeesCell b, double probRandom) {
+	private BeesCell moveBeeCloser(BeesState s, BeesCell b, double probRandom) {
 		Random rn = new Random();
 		BeesAgent agent = (BeesAgent)s.agent;
-		BeesCell bee = (BeesCell)s.object(b.name());
 		int [][] map = s.map.map;
 
 		int ax = agent.x;
 		int ay = agent.y;
-		int bx = bee.x;
-		int by = bee.y;
+		int bx = b.x;
+		int by = b.y;
 		int nx = bx;
 		int ny = by;
 		
@@ -177,7 +179,7 @@ public class BeesModel implements FullStateModel {
 		// Chance for bee to choose to roam randomly
 		if(i < probRandom) {
 			moveBeeRandom(s, b, 1.0);
-			return;
+			return b;
 		}
 		
 		nx = bx + Math.max(Math.min(ax - bx, 1), -1);
@@ -191,19 +193,14 @@ public class BeesModel implements FullStateModel {
 			}
 		}
 
-		if(nx < 0 || nx >= maxx){
-			return;
+		if(nx < 0 || nx >= maxx || ny < 0 || ny >= maxy){
+			return b;
 		}
-		if(ny < 0 || ny >= maxy){
-			return;
-		}
-		
 		if(map[nx][ny] == 1) {
-			return;
+			return b;
 		}
 		
-		bee.x = nx;
-		bee.y = ny;
+		return this.moveBee(s, b, nx, ny);
 	}
 }
 
