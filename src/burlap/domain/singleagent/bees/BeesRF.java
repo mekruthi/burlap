@@ -12,7 +12,7 @@ public class BeesRF implements RewardFunction {
 
 	public double goalReward = 1000.0;
 	public double lostReward = -1000.0;
-	public double stingReward = -500.0;
+	public double stingReward = -100.0;
 	public double honeyReward = 200.0; 
 	public double defaultReward = -1.0;
 	private PropositionalFunction noHealth;
@@ -31,12 +31,16 @@ public class BeesRF implements RewardFunction {
 	public double reward(State s, Action a, State sprime) {
 		BeesState bs = (BeesState)s;
 		BeesState bsprime = (BeesState)sprime;
-		if (noHealth.somePFGroundingIsTrue((OOState)sprime))
+		
+		if (noHealth.somePFGroundingIsTrue(bsprime)) {
 			return lostReward;
-		if (noHunger.somePFGroundingIsTrue((OOState)sprime))
+		}
+		if (noHunger.somePFGroundingIsTrue(bsprime)) {
 			return goalReward;
+		}
+		
 		double actualHoneyReward = 0;
-		if(atHoney.somePFGroundingIsTrue((OOState)sprime)) {
+		if(atHoney.somePFGroundingIsTrue(bsprime)) {
 			actualHoneyReward = honeyReward;
 		}
 		if (bs.agent.health > bsprime.agent.health)			

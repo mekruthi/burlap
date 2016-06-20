@@ -77,15 +77,10 @@ public class BeesModel implements FullStateModel {
 		int nx = ax+dx;
 		int ny = ay+dy;
 
-		if(nx < 0 || nx >= maxx || ny < 0 || ny >= maxy){
-			return;
-		}		
-		if(map[nx][ny] == 1) {
-			return;
+		if(nx >= 0 && nx < maxx && ny >= 0 && ny < maxy && map[nx][ny] != 1){
+			agent.x = nx;
+			agent.y = ny;
 		}
-
-		agent.x = nx;
-		agent.y = ny;
 
 		// Let the bees move
 		for(BeesCell b : s.bees) {			

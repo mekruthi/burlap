@@ -7,6 +7,8 @@ import burlap.behavior.policy.Policy;
 import burlap.behavior.policy.PolicyUtils;
 import burlap.behavior.singleagent.Episode;
 import burlap.behavior.singleagent.auxiliary.EpisodeSequenceVisualizer;
+import burlap.behavior.singleagent.auxiliary.StateReachability;
+import burlap.behavior.singleagent.auxiliary.valuefunctionvis.ValueFunctionVisualizerGUI;
 import burlap.behavior.singleagent.learning.LearningAgent;
 import burlap.behavior.singleagent.learning.tdmethods.QLearning;
 import burlap.behavior.singleagent.learning.tdmethods.SarsaLam;
@@ -14,6 +16,9 @@ import burlap.behavior.singleagent.planning.deterministic.DeterministicPlanner;
 import burlap.behavior.singleagent.planning.deterministic.informed.Heuristic;
 import burlap.behavior.singleagent.planning.deterministic.informed.astar.AStar;
 import burlap.behavior.singleagent.planning.deterministic.uninformed.bfs.BFS;
+import burlap.behavior.singleagent.planning.stochastic.montecarlo.uct.UCT;
+import burlap.behavior.singleagent.planning.stochastic.policyiteration.PolicyIteration;
+import burlap.behavior.singleagent.planning.stochastic.valueiteration.ValueIteration;
 import burlap.domain.singleagent.bees.state.BeesAgent;
 import burlap.domain.singleagent.bees.state.BeesCell;
 import burlap.domain.singleagent.bees.state.BeesMap;
@@ -30,7 +35,9 @@ import burlap.mdp.core.state.State;
 import burlap.mdp.core.oo.propositional.PropositionalFunction;
 import burlap.mdp.singleagent.SADomain;
 import burlap.mdp.singleagent.common.UniformCostRF;
+import burlap.mdp.singleagent.common.VisualActionObserver;
 import burlap.mdp.singleagent.environment.SimulatedEnvironment;
+import burlap.mdp.singleagent.environment.extensions.EnvironmentServer;
 import burlap.mdp.singleagent.model.RewardFunction;
 import burlap.mdp.singleagent.model.FactoredModel;
 import burlap.mdp.singleagent.action.UniversalActionType;
@@ -39,6 +46,9 @@ import burlap.shell.visual.VisualExplorer;
 import burlap.statehashing.simple.SimpleHashableStateFactory;
 import burlap.visualizer.Visualizer;
 
+import java.io.FileNotFoundException;
+import java.io.PrintWriter;
+import java.io.UnsupportedEncodingException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -202,7 +212,7 @@ public class Bees implements DomainGenerator {
 			tf = new BeesTF();
 		}
 		if(rf == null){
-			rf = new UniformCostRF();
+			rf = new BeesRF(domain);
 		}
 
 		BeesModel smodel = new BeesModel(maxx, maxy);
@@ -345,6 +355,17 @@ public class Bees implements DomainGenerator {
 	 * @param args can be empty.
 	 */
 	public static void main(String[] args) {
+		int HEALTH = 1;
+		int HUNGER = 3;
+		int NUM_BEES = 3;
+		
+		int AGENT_SPAWN_X = 15;
+		int AGENT_SPAWN_Y = 1;
+		int BEE_SPAWN_X = 23;
+		int BEE_SPAWN_Y = 23;
+		int HONEY_X = 3;
+		int HONEY_Y = 21;
+		
 		Bees be = new Bees();
 		OOSADomain domain = be.generateDomain();
 		be.setTf(new BeesTF());
@@ -352,15 +373,15 @@ public class Bees implements DomainGenerator {
 
 		int [][] map = new int[25][25];
 		ArrayList<BeesCell> bees = new ArrayList<BeesCell>();
-		for(int i = 0; i < 4; i++) {
-			BeesCell b = BeesCell.bee("b" + i, 23, 23);
+		for(int i = 0; i < NUM_BEES; i++) {
+			BeesCell b = BeesCell.bee("b" + i, BEE_SPAWN_X, BEE_SPAWN_Y);
 			bees.add(b);
 		}
 		
 		BeesState s = new BeesState(
-				new BeesAgent(15, 1, 4, 1),
+				new BeesAgent(AGENT_SPAWN_X, AGENT_SPAWN_Y, HEALTH, HUNGER),
 				new BeesMap(map),
-				BeesCell.honey("honey", 3, 21),
+				BeesCell.honey("honey", HONEY_X, HONEY_Y),
 				bees
 		);
 		
@@ -383,48 +404,45 @@ public class Bees implements DomainGenerator {
 	}
 	
 	private static void runPlanner(Bees be, OOSADomain domain, BeesState initialState) {
-		TFGoalCondition goalCondition = new TFGoalCondition(be.getTf());
+		double GAMMA = 0.99;
+		double MAX_DELTA = 0.001;
+		int MAX_ITERATIONS = 100;
+		int HORIZON = 5;
+		int ROLLOUTS = 5;
+		int EXPLORE_BIAS = 2;
+		String OUTPUT_FOLDER = "output/planner/";
 		SimpleHashableStateFactory hashingFactory = new SimpleHashableStateFactory();
+		SimulatedEnvironment env = new SimulatedEnvironment(domain, initialState);
 		
-		Heuristic mdistHeuristic = new Heuristic() {
-			public double h(State s) {
-				BeesAgent a = ((BeesState)s).agent;
-				BeesCell h = ((BeesState)s).honey;
-				double mdist = Math.abs(a.x - h.x) + Math.abs(a.y - h.y);
-				return -mdist;
-			}
-		};
-		
-		DeterministicPlanner planner = new AStar(domain, goalCondition, hashingFactory, mdistHeuristic);
+		UCT planner = new UCT(domain, GAMMA, hashingFactory, HORIZON, ROLLOUTS, EXPLORE_BIAS);
+		//ValueIteration planner = new ValueIteration(domain, GAMMA, hashingFactory, MAX_DELTA, MAX_ITERATIONS);
 		Policy p = planner.planFromState(initialState);
-		PolicyUtils.rollout(p,  initialState, domain.getModel()).writeToFile("output/star/");
-		
-		Visualizer v = BeesVisualizer.getVisualizer(be.maxx, be.maxy);
-		new EpisodeSequenceVisualizer(v, domain, "ouptut/bfs/");
+		PolicyUtils.rollout(p, env).writeToFile(OUTPUT_FOLDER + "vi");
+
+		List<State> allStates = StateReachability.getReachableStates(initialState, domain, hashingFactory);
+		// Show GUI
 	}
 	
 	private static void runLearner(Bees be, OOSADomain domain, BeesState initialState) {
+		int EPISODE_COUNT = 90000;
 		double SAVE_PERCENT = 0.05; // percent of last runs to save
 		String OUTPUT_FOLDER = "output/ql/";
 		int POST_WIN_SAVE = 3;
 		
-		double GAMMA = 0.9;
+		double GAMMA = 0.99;
 		double QINIT = 0.;
 		double LEARNING_RATE = 0.1;
 		int MAX_STEPS = 500;
-		double LAMBDA = 0.9;
-		double EPSILON = 0.1;
+		double EPSILON = 0.;
 		
 		SimpleHashableStateFactory hashingFactory = new SimpleHashableStateFactory();
-		//LearningAgent agent = new QLearning(domain, GAMMA, hashingFactory, QINIT, LEARNING_RATE, MAX_STEPS);
-		SarsaLam agent = new SarsaLam(domain, GAMMA, hashingFactory, QINIT, LEARNING_RATE, MAX_STEPS, LAMBDA);
+		QLearning agent = new QLearning(domain, GAMMA, hashingFactory, QINIT, LEARNING_RATE, MAX_STEPS);
 		agent.setLearningPolicy(new EpsilonGreedy(agent, EPSILON));
 		SimulatedEnvironment env = new SimulatedEnvironment(domain, initialState);
-
-		ArrayList<Integer> steps = new ArrayList<Integer>();
-		ArrayList<Double> rewards = new ArrayList<Double>();
 		
-		int EPISODE_COUNT = 10000;
+		ArrayList<Integer> cumSteps = new ArrayList<Integer>();
+		ArrayList<Double> cumReward = new ArrayList<Double>();
+		
 		int last_win = 0 - POST_WIN_SAVE;
 		PropositionalFunction noHunger = domain.getPropFunction(PF_NO_HUNGER);
 		// Start the episodes
@@ -445,10 +463,6 @@ public class Bees implements DomainGenerator {
 			else if(i > (EPISODE_COUNT * (1 - SAVE_PERCENT))) {
 				e.writeToFile(OUTPUT_FOLDER + i);
 			}
-			
-			
-			steps.add(e.maxTimeStep());
-			rewards.add(e.getReward(e.maxTimeStep()));
 
 			if(i % (EPISODE_COUNT / 20) == 0 && i > 0) {
 				System.out.println((i / (EPISODE_COUNT / 100)) + "% complete...");
