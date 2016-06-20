@@ -10,10 +10,10 @@ import burlap.mdp.singleagent.model.RewardFunction;
 
 public class BeesRF implements RewardFunction {
 
-	public double goalReward = 1000.0;
-	public double lostReward = -1000.0;
-	public double stingReward = -100.0;
-	public double honeyReward = 200.0; 
+	public double goalReward = 100.0;
+	public double lostReward = -100.0;
+	public double stingReward = -20.0;
+	public double honeyReward = 20.0; 
 	public double defaultReward = -1.0;
 	private PropositionalFunction noHealth;
 	private PropositionalFunction noHunger;

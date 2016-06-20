@@ -22,7 +22,7 @@ public class BeesModel implements FullStateModel {
 	protected int maxx;
 	protected int maxy;
 	
-	private double PROB_RANDOM_BEE = 0.;
+	private double PROB_RANDOM_BEE = 0.2;
 
 	public BeesModel(int maxx, int maxy) {
 		this.maxx = maxx;

@@ -1,5 +1,9 @@
 package burlap.domain.singleagent.bees;
 
+import burlap.behavior.singleagent.auxiliary.EpisodeSequenceVisualizer;
+import burlap.domain.singleagent.bees.state.BeesCell;
+import burlap.domain.singleagent.bees.state.BeesState;
+import burlap.mdp.core.Domain;
 import burlap.mdp.core.oo.state.OOState;
 import burlap.mdp.core.oo.state.ObjectInstance;
 import burlap.visualizer.OOStatePainter;
@@ -9,6 +13,8 @@ import burlap.visualizer.Visualizer;
 
 import java.awt.*;
 import java.awt.geom.Rectangle2D;
+
+import javax.swing.JFrame;
 
 /**
  * @author Shawn Squire.
@@ -28,6 +34,13 @@ public class BeesVisualizer {
 	public static Visualizer getVisualizer(int maxx, int maxy){
 		Visualizer v = new Visualizer(getStateRenderLayer(maxx, maxy));
 		return v;
+	}
+	
+	public static EpisodeSequenceVisualizer getEpisodeSequenceVisualizer(Bees be, Domain domain, String output) {
+		Visualizer v = BeesVisualizer.getVisualizer(be.maxx, be.maxy);
+		EpisodeSequenceVisualizer esv = new EpisodeSequenceVisualizer(v, domain, output);
+		esv.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+		return esv;
 	}
 
 	/**
@@ -92,6 +105,7 @@ public class BeesVisualizer {
 			g2.fill(new Rectangle2D.Float(rx, ry, width, height));
 
 			// Draw the health and hunger
+			g2.setFont(new Font("default", Font.PLAIN, 12));
 			g2.drawString("Health: " + ob.get(Bees.VAR_HEALTH), 5, 25);
 			g2.drawString("Hunger: " + ob.get(Bees.VAR_HUNGER), 5, 45);
 		}
@@ -126,6 +140,11 @@ public class BeesVisualizer {
 								float cWidth, float cHeight) {
 
 			g2.setColor(Color.red);
+			
+			// get number of bees on that square
+			BeesCell bee = (BeesCell)ob;
+			BeesState bs = (BeesState)s;
+			int numBees = bs.numBeesAt(bee.x, bee.y);
 
 			float domainXScale = (maxx) - minx;
 			float domainYScale = (maxy) - miny;
@@ -139,7 +158,13 @@ public class BeesVisualizer {
 
 			g2.fill(new Rectangle2D.Float(rx, ry, width, height));
 			
+			g2.setFont(new Font("default", Font.PLAIN, 12));
 			g2.drawString("Bees: " + s.objectsOfClass(Bees.CLASS_BEE).size(), 5, 65);
+			if(numBees > 1) {
+				g2.setColor(Color.black);
+				g2.setFont(new Font("default", Font.BOLD, 16));
+				g2.drawString("" + numBees, rx + width - 15, ry + height - 3);
+			}
 		}
 	}
 

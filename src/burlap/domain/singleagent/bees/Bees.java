@@ -18,7 +18,9 @@ import burlap.behavior.singleagent.planning.deterministic.informed.astar.AStar;
 import burlap.behavior.singleagent.planning.deterministic.uninformed.bfs.BFS;
 import burlap.behavior.singleagent.planning.stochastic.montecarlo.uct.UCT;
 import burlap.behavior.singleagent.planning.stochastic.policyiteration.PolicyIteration;
+import burlap.behavior.singleagent.planning.stochastic.rtdp.BoundedRTDP;
 import burlap.behavior.singleagent.planning.stochastic.valueiteration.ValueIteration;
+import burlap.behavior.valuefunction.ValueFunctionInitialization;
 import burlap.domain.singleagent.bees.state.BeesAgent;
 import burlap.domain.singleagent.bees.state.BeesCell;
 import burlap.domain.singleagent.bees.state.BeesMap;
@@ -52,6 +54,8 @@ import java.io.UnsupportedEncodingException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+
+import javax.swing.JFrame;
 
 /**
  */
@@ -357,7 +361,7 @@ public class Bees implements DomainGenerator {
 	public static void main(String[] args) {
 		int HEALTH = 1;
 		int HUNGER = 3;
-		int NUM_BEES = 3;
+		int NUM_BEES = 1;
 		
 		int AGENT_SPAWN_X = 15;
 		int AGENT_SPAWN_Y = 1;
@@ -386,13 +390,14 @@ public class Bees implements DomainGenerator {
 		);
 		
 		//runInteractive(be, domain, s);
-		//runPlanner(be, domain, s);
-		runLearner(be, domain, s);
+		runPlanner(be, domain, s);
+		//runLearner(be, domain, s);
 	}
 	
 	private static void runInteractive(Bees be, OOSADomain domain, BeesState initialState) {
 		Visualizer v = BeesVisualizer.getVisualizer(be.maxx, be.maxy);
 		VisualExplorer exp = new VisualExplorer(domain, v, initialState);
+		exp.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 
 		exp.addKeyAction("w", ACTION_NORTH, "");
 		exp.addKeyAction("d", ACTION_EAST, "");
@@ -406,21 +411,23 @@ public class Bees implements DomainGenerator {
 	private static void runPlanner(Bees be, OOSADomain domain, BeesState initialState) {
 		double GAMMA = 0.99;
 		double MAX_DELTA = 0.001;
-		int MAX_ITERATIONS = 100;
-		int HORIZON = 5;
-		int ROLLOUTS = 5;
-		int EXPLORE_BIAS = 2;
+		int MAX_ROLLOUTS = 10000;
+		int MAX_ROLLOUT_DEPTH = 100;
+		double LOWER_VINIT = 0.;
+		double UPPER_VINIT = 100.;
 		String OUTPUT_FOLDER = "output/planner/";
 		SimpleHashableStateFactory hashingFactory = new SimpleHashableStateFactory();
 		SimulatedEnvironment env = new SimulatedEnvironment(domain, initialState);
 		
-		UCT planner = new UCT(domain, GAMMA, hashingFactory, HORIZON, ROLLOUTS, EXPLORE_BIAS);
-		//ValueIteration planner = new ValueIteration(domain, GAMMA, hashingFactory, MAX_DELTA, MAX_ITERATIONS);
+		BoundedRTDP planner = new BoundedRTDP(domain, GAMMA, hashingFactory, 
+				new ValueFunctionInitialization.ConstantValueFunctionInitialization(LOWER_VINIT),
+				new ValueFunctionInitialization.ConstantValueFunctionInitialization(UPPER_VINIT),
+				MAX_DELTA, MAX_ROLLOUTS);
+		planner.setMaxRolloutDepth(MAX_ROLLOUT_DEPTH);
 		Policy p = planner.planFromState(initialState);
 		PolicyUtils.rollout(p, env).writeToFile(OUTPUT_FOLDER + "vi");
-
-		List<State> allStates = StateReachability.getReachableStates(initialState, domain, hashingFactory);
-		// Show GUI
+		
+		BeesVisualizer.getEpisodeSequenceVisualizer(be, domain, OUTPUT_FOLDER);
 	}
 	
 	private static void runLearner(Bees be, OOSADomain domain, BeesState initialState) {
@@ -470,8 +477,7 @@ public class Bees implements DomainGenerator {
 			env.resetEnvironment();
 		}
 		
-		Visualizer v = BeesVisualizer.getVisualizer(be.maxx, be.maxy);
-		new EpisodeSequenceVisualizer(v, domain, OUTPUT_FOLDER);
+		BeesVisualizer.getEpisodeSequenceVisualizer(be, domain, OUTPUT_FOLDER);
 	}
 }
 

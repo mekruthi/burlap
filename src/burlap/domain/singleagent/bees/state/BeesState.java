@@ -228,6 +228,16 @@ public class BeesState implements MutableOOState {
 		}
 		return -1;
 	}
+	
+	public int numBeesAt(int x, int y) {
+		int num = 0;
+		for(BeesCell b : this.bees) {
+			if(b.x == x && b.y == y) {
+				num += 1;
+			}
+		}
+		return num;
+	}
 
 	@Override
 	public String toString() {
