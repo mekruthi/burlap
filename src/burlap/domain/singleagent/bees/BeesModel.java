@@ -8,7 +8,6 @@ import burlap.mdp.core.StateTransitionProb;
 import burlap.mdp.core.state.State;
 import burlap.mdp.singleagent.model.statemodel.FullStateModel;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 
